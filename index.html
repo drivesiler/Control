@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fina Web - Multi-Tienda npoint.io</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+    <!-- Navbar Superior -->
+    <header class="bg-slate-900 text-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <h1 class="text-xl font-bold tracking-wide flex items-center gap-2">
+                <i class="fa-solid fa-wallet text-emerald-400"></i> Fina <span class="text-xs bg-indigo-600 px-2 py-0.5 rounded text-white font-normal">Multi-Tienda</span>
+            </h1>
+            
+            <!-- Selector de Tiendas y Tasa -->
+            <div class="flex flex-wrap items-center gap-3 text-xs">
+                <!-- Selector de Tienda / Base de Datos -->
+                <div class="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400"><i class="fa-solid fa-store mr-1"></i> Tienda:</span>
+                    <select id="selectTienda" class="bg-slate-900 text-white px-2 py-1 rounded border border-slate-600 font-medium outline-none" onchange="cambiarTienda(this.value)">
+                        <!-- Se llena dinámicamente con JS -->
+                    </select>
+                    <button onclick="agregarTiendaPrompt()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded transition" title="Añadir nueva tienda"><i class="fa-solid fa-plus"></i></button>
+                </div>
+
+                <!-- Tasa de Cambio -->
+                <div class="flex items-center gap-1 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <span class="text-slate-400">Tasa (USD/VES):</span>
+                    <input type="number" step="0.01" id="tasaCambio" value="36.50" class="w-16 bg-slate-900 text-white px-1.5 py-0.5 rounded border border-slate-600 text-center font-bold" onchange="actualizarTasa()">
+                </div>
+
+                <span id="estadoSync" class="text-emerald-400 font-medium"><i class="fa-solid fa-circle-check"></i> Sincronizado</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        
+        <!-- Tarjetas de Resumen (KPIs) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Balance General (USD)</p>
+                    <p id="lblBalance" class="text-3xl font-extrabold text-slate-900 mt-1">$0.00</p>
+                    <p id="lblBalanceBs" class="text-xs text-gray-400 mt-0.5">Bs. 0.00</p>
+                </div>
+                <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-scale-balanced"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Ingresos Totales</p>
+                    <p id="lblIngresos" class="text-3xl font-extrabold text-emerald-600 mt-1">+$0.00</p>
+                </div>
+                <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-gray-500 uppercase tracking-wider">Gastos Totales</p>
+                    <p id="lblGastos" class="text-3xl font-extrabold text-rose-600 mt-1">-$0.00</p>
+                </div>
+                <div class="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-arrow-trend-down"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layout Principal: Formulario y Gráfica -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            
+            <!-- Columna Izquierda: Formulario -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit">
+                <h2 id="tituloTiendaActiva" class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-plus text-blue-600"></i> Nuevo Movimiento
+                </h2>
+                
+                <form id="formTransaccion" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Tipo de Transacción</label>
+                        <select id="tipo" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                            <option value="gasto">Gasto</option>
+                            <option value="ingreso">Ingreso</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Monto</label>
+                            <input type="number" step="0.01" id="monto" placeholder="0.00" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Moneda</label>
+                            <select id="moneda" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="USD">USD ($)</option>
+                                <option value="VES">Bolívares (Bs.)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Fecha</label>
+                        <input type="date" id="fecha" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Descripción / Comercio</label>
+                        <input type="text" id="descripcion" placeholder="Ej. Proveedor, Caja..." class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Cuenta / Billetera</label>
+                        <select id="cuenta" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="Efectivo USD">Efectivo USD</option>
+                            <option value="Banco Local">Banco Local</option>
+                            <option value="Binance Pay">Binance Pay</option>
+                            <option value="Zinli">Zinli</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 uppercase mb-1">Categoría</label>
+                        <select id="categoria" class="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="Inventario / Mercancía">Inventario / Mercancía</option>
+                            <option value="Gastos operativos">Gastos operativos</option>
+                            <option value="Servicios">Servicios</option>
+                            <option value="Ventas / Ingresos">Ventas / Ingresos</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg text-sm transition shadow-sm">
+                        Guardar Transacción
+                    </button>
+                </form>
+            </div>
+
+            <!-- Columna Central/Derecha: Gráfica -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-blue-600"></i> Desglose de Gastos por Categoría
+                    </h2>
+                    <p class="text-xs text-gray-400 mb-4">Valores normalizados en USD para la tienda seleccionada</p>
+                </div>
+                <div class="relative w-full h-72 flex justify-center items-center">
+                    <canvas id="graficoCategorias"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tabla de Movimientos Registrados -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-list text-blue-600"></i> Historial de Movimientos
+                </h2>
+                <div class="flex items-center gap-3">
+                    <button onclick="eliminarTiendaActual()" class="text-xs text-rose-600 hover:underline"><i class="fa-solid fa-trash mr-1"></i> Eliminar tienda actual</button>
+                    <button onclick="borrarTodoRemoto()" class="text-xs text-gray-500 hover:underline">Vaciar registros</button>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-200 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            <th class="py-3 px-2">Fecha</th>
+                            <th class="py-3 px-2">Descripción</th>
+                            <th class="py-3 px-2">Cuenta</th>
+                            <th class="py-3 px-2">Categoría</th>
+                            <th class="py-3 px-2 text-right">Monto Original</th>
+                            <th class="py-3 px-2 text-right">Equiv. (USD)</th>
+                            <th class="py-3 px-2 text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaTransacciones" class="divide-y divide-gray-100 text-sm">
+                        <tr><td colspan="7" class="py-8 text-center text-gray-400">Selecciona o agrega una tienda...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Script Multi-Tienda y npoint.io -->
+    <script>
+        document.getElementById('fecha').valueAsDate = new Date();
+
+        let tasaCambio = parseFloat(localStorage.getItem('fina_tasa')) || 36.50;
+        document.getElementById('tasaCambio').value = tasaCambio;
+
+        // Lista de tiendas guardadas (Estructura: [{nombre: "Tienda A", id: "abc123xyz"}, ...])
+        let tiendas = JSON.parse(localStorage.getItem('fina_tiendas')) || [
+            { nombre: "Personal / Principal", id: "" } // Tienda por defecto vacía para configurar
+        ];
+        
+        let tiendaActualId = localStorage.getItem('fina_tienda_actual') || (tiendas.length > 0 ? tiendas[0].id : '');
+        let transacciones = [];
+        let chartInstance = null;
+
+        function actualizarTasa() {
+            tasaCambio = parseFloat(document.getElementById('tasaCambio').value) || 1;
+            localStorage.setItem('fina_tasa', tasaCambio);
+            renderizarApp();
+        }
+
+        // Inicializar el selector desplegable
+        function poblarSelectorTiendas() {
+            const select = document.getElementById('selectTienda');
+            select.innerHTML = '';
+            
+            tiendas.forEach(t => {
+                const option = document.createElement('option');
+                option.value = t.id;
+                option.textContent = t.nombre;
+                if (t.id === tiendaActualId) option.selected = true;
+                select.appendChild(option);
+            });
+        }
+
+        function cambiarTienda(nuevoId) {
+            tiendaActualId = nuevoId;
+            localStorage.setItem('fina_tienda_actual', tiendaActualId);
+            cargarDesdeNube();
+        }
+
+        function agregarTiendaPrompt() {
+            const nombre = prompt('Ingresa el nombre de la nueva tienda o perfil:');
+            if (!nombre) return;
+            const idNpoint = prompt('Ingresa el ID de npoint.io creado para esta tienda (ej. abc123xyz):');
+            if (!idNpoint) return;
+
+            tiendas.push({ nombre: nombre.trim(), id: idNpoint.trim() });
+            localStorage.setItem('fina_tiendas', JSON.stringify(tiendas));
+            
+            poblarSelectorTiendas();
+            cambiarTienda(idNpoint.trim());
+        }
+
+        function eliminarTiendaActual() {
+            if (tiendas.length <= 1) {
+                alert('Debes mantener al menos una tienda registrada.');
+                return;
+            }
+            if (confirm('¿Estás seguro de eliminar esta tienda del selector? (No se borrarán los datos en npoint, solo dejarás de verla aquí).')) {
+                tiendas = tiendas.filter(t => t.id !== tiendaActualId);
+                localStorage.setItem('fina_tiendas', JSON.stringify(tiendas));
+                tiendaActualId = tiendas[0].id;
+                localStorage.setItem('fina_tienda_actual', tiendaActualId);
+                poblarSelectorTiendas();
+                cargarDesdeNube();
+            }
+        }
+
+        // Cargar datos desde npoint.io según la tienda activa
+        async function cargarDesdeNube() {
+            if (!tiendaActualId) {
+                transacciones = [];
+                renderizarApp();
+                document.getElementById('tablaTransacciones').innerHTML = `<tr><td colspan="7" class="py-8 text-center text-amber-600">Haz clic en el botón <b>+</b> al lado del selector de tienda para configurar tu primer ID de npoint.io.</td></tr>`;
+                return;
+            }
+
+            setEstadoSync('cargando', 'Cargando...');
+            try {
+                const response = await fetch(`https://api.npoint.io/${tiendaActualId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    transacciones = Array.isArray(data) ? data : [];
+                    renderizarApp();
+                    setEstadoSync('ok', 'Sincronizado');
+                } else {
+                    setEstadoSync('error', 'Error al leer');
+                    alert('No se pudo conectar con el ID de npoint.io de esta tienda.');
+                }
+            } catch (err) {
+                setEstadoSync('error', 'Sin conexión');
+            }
+        }
+
+        // Guardar automáticamente en npoint.io de la tienda activa
+        async function guardarEnNube() {
+            if (!tiendaActualId) {
+                alert('Configura o selecciona una tienda válida primero.');
+                return false;
+            }
+
+            setEstadoSync('cargando', 'Guardando...');
+            try {
+                const response = await fetch(`https://api.npoint.io/${tiendaActualId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(transacciones)
+                });
+                if (response.ok) {
+                    setEstadoSync('ok', 'Sincronizado');
+                    return true;
+                } else {
+                    setEstadoSync('error', 'Error al guardar');
+                    return false;
+                }
+            } catch (err) {
+                setEstadoSync('error', 'Error de red');
+                return false;
+            }
+        }
+
+        function setEstadoSync(tipo, texto) {
+            const span = document.getElementById('estadoSync');
+            if(tipo === 'ok') {
+                span.className = 'text-emerald-400 font-medium';
+                span.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${texto}`;
+            } else if(tipo === 'cargando') {
+                span.className = 'text-amber-400 font-medium';
+                span.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${texto}`;
+            } else {
+                span.className = 'text-rose-400 font-medium';
+                span.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${texto}`;
+            }
+        }
+
+        document.getElementById('formTransaccion').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const montoInput = parseFloat(document.getElementById('monto').value);
+            const monedaInput = document.getElementById('moneda').value;
+            const montoUSD = monedaInput === 'VES' ? montoInput / tasaCambio : montoInput;
+
+            const nuevaTx = {
+                id: Date.now(),
+                tipo: document.getElementById('tipo').value,
+                fecha: document.getElementById('fecha').value,
+                descripcion: document.getElementById('descripcion').value,
+                montoOriginal: montoInput,
+                moneda: monedaInput,
+                montoUSD: montoUSD,
+                cuenta: document.getElementById('cuenta').value,
+                categoria: document.getElementById('categoria').value
+            };
+
+            transacciones.unshift(nuevaTx);
+            const exito = await guardarEnNube();
+            if(exito) {
+                renderizarApp();
+                this.reset();
+                document.getElementById('fecha').valueAsDate = new Date();
+                document.getElementById('moneda').value = 'USD';
+            } else {
+                transacciones.shift();
+            }
+        });
+
+        async function eliminarTransaccion(id) {
+            if(!confirm('¿Eliminar este movimiento?')) return;
+            transacciones = transacciones.filter(t => t.id !== id);
+            await guardarEnNube();
+            renderizarApp();
+        }
+
+        async function borrarTodoRemoto() {
+            if(confirm('¿Vaciar todos los registros de esta tienda?')) {
+                transacciones = [];
+                await guardarEnNube();
+                renderizarApp();
+            }
+        }
+
+        function renderizarApp() {
+            const tbody = document.getElementById('tablaTransacciones');
+            tbody.innerHTML = '';
+
+            let totalIngresosUSD = 0;
+            let totalGastosUSD = 0;
+            let gastosPorCategoria = {};
+
+            if (transacciones.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-400">No hay transacciones registradas en esta tienda. ¡Agrega la primera!</td></tr>`;
+            }
+
+            transacciones.forEach(tx => {
+                if (tx.tipo === 'ingreso') {
+                    totalIngresosUSD += tx.montoUSD;
+                } else {
+                    totalGastosUSD += tx.montoUSD;
+                    gastosPorCategoria[tx.categoria] = (gastosPorCategoria[tx.categoria] || 0) + tx.montoUSD;
+                }
+
+                const simboloMoneda = tx.moneda === 'VES' ? 'Bs.' : '$';
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50/50 transition";
+                tr.innerHTML = `
+                    <td class="py-3 px-2 text-gray-500 whitespace-nowrap">${tx.fecha}</td>
+                    <td class="py-3 px-2 font-medium text-gray-800">${tx.descripcion}</td>
+                    <td class="py-3 px-2 text-gray-600"><span class="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">${tx.cuenta}</span></td>
+                    <td class="py-3 px-2 text-gray-600"><span class="bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded font-medium">${tx.categoria}</span></td>
+                    <td class="py-3 px-2 text-right font-semibold text-gray-700">${simboloMoneda}${tx.montoOriginal.toFixed(2)}</td>
+                    <td class="py-3 px-2 text-right font-bold ${tx.tipo === 'ingreso' ? 'text-emerald-600' : 'text-slate-800'}">
+                        ${tx.tipo === 'ingreso' ? '+' : '-'}$${tx.montoUSD.toFixed(2)}
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        <button onclick="eliminarTransaccion(${tx.id})" class="text-gray-400 hover:text-rose-600"><i class="fa-solid fa-trash-can"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const balanceUSD = totalIngresosUSD - totalGastosUSD;
+            const balanceVES = balanceUSD * tasaCambio;
+
+            document.getElementById('lblIngresos').innerText = `+$${totalIngresosUSD.toFixed(2)}`;
+            document.getElementById('lblGastos').innerText = `-$${totalGastosUSD.toFixed(2)}`;
+            
+            const lblBalance = document.getElementById('lblBalance');
+            lblBalance.innerText = `$${balanceUSD.toFixed(2)}`;
+            lblBalance.className = `text-3xl font-extrabold mt-1 ${balanceUSD >= 0 ? 'text-slate-900' : 'text-rose-600'}`;
+            
+            document.getElementById('lblBalanceBs').innerText = `Bs. ${balanceVES.toLocaleString('es-VE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+            actualizarGrafico(gastosPorCategoria);
+        }
+
+        function actualizarGrafico(datosCategorias) {
+            const ctx = document.getElementById('graficoCategorias').getContext('2d');
+            const labels = Object.keys(datosCategorias);
+            const data = Object.values(datosCategorias);
+
+            if (chartInstance) chartInstance.destroy();
+
+            if (labels.length === 0) {
+                chartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Sin gastos registrados'],
+                        datasets: [{ data: [1], backgroundColor: ['#e5e7eb'] }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+                return;
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    cutout: '65%'
+                }
+            });
+        }
+
+        // Ejecutar al cargar la página
+        poblarSelectorTiendas();
+        cargarDesdeNube();
+    </script>
+</body>
+</html>
